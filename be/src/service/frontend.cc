@@ -40,6 +40,10 @@ using namespace impala;
 DEFINE_string(authorization_factory_class,
     "org.apache.impala.authorization.sentry.SentryAuthorizationFactory",
     "Specifies the class name that implements the authorization provider.");
+DEFINE_string(ranger_service_type, "impala", "Specifies the Ranger service type.");
+DEFINE_string(ranger_app_id, "",
+    "Specifies the Ranger application ID. Ranger application ID is an ID to uniquely "
+    "identify the application that communicates with Ranger.");
 DEFINE_string(server_name, "", "The name to use for securing this impalad "
     "server during authorization. Set to enable authorization. By default, the "
     "authorization policy will be loaded from the catalog server (via the statestore)."

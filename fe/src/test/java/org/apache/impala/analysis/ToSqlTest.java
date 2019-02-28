@@ -20,6 +20,7 @@ package org.apache.impala.analysis;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import org.apache.impala.authorization.sentry.SentryAuthorizationFactory;
 import org.apache.impala.common.AnalysisException;
 import org.apache.impala.common.FrontendTestBase;
 import org.apache.impala.testutil.TestUtils;
@@ -1487,7 +1488,7 @@ public class ToSqlTest extends FrontendTestBase {
     testToSql("REFRESH functional.alltypes");
     testToSql("REFRESH functional.alltypes PARTITION (year=2009, month=1)");
     testToSql("REFRESH FUNCTIONS functional");
-    testToSql(createAnalysisCtx(createAuthorizationConfig()), "REFRESH AUTHORIZATION");
+    testToSql(createAnalysisCtx(createAuthorizationFactory()), "REFRESH AUTHORIZATION");
   }
 
   /**

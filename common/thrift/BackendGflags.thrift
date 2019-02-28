@@ -119,4 +119,8 @@ struct TBackendGflags {
   46: required string impala_build_version
 
   47: required string authorization_factory_class
+
+  48: required string ranger_service_type
+
+  49: required string ranger_app_id
 }

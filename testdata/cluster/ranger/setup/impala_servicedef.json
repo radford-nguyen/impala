@@ -1,0 +1,149 @@
+{
+  "accessTypes": [
+    {
+      "name": "select",
+      "label": "Select",
+      "itemId": 1
+    },
+    {
+      "name": "insert",
+      "label": "Insert",
+      "itemId": 2
+    },
+    {
+      "name": "alter",
+      "label": "Alter",
+      "itemId": 3
+    },
+    {
+      "name": "create",
+      "label": "Create",
+      "itemId": 4
+    },
+    {
+      "name": "drop",
+      "label": "Drop",
+      "itemId": 5
+    },
+    {
+      "name": "refresh",
+      "label": "Refresh",
+      "itemId": 6
+    },
+    {
+      "name": "all",
+      "label": "All",
+      "itemId": 7,
+      "impliedGrants": [
+        "select",
+        "insert",
+        "create",
+        "refresh",
+        "drop",
+        "alter"
+      ]
+    }
+  ],
+  "description": "Impala",
+  "isEnabled": true,
+  "label": "Impala",
+  "name": "impala",
+  "resources": [
+    {
+      "itemId": 1,
+      "name": "server",
+      "type": "string",
+      "level": 1,
+      "mandatory": true,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "label": "Impala Server",
+      "description": "Impala Server"
+    },
+    {
+      "itemId": 2,
+      "name": "database",
+      "type": "string",
+      "level": 2,
+      "parent": "server",
+      "mandatory": false,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "label": "Impala Database",
+      "description": "Impala Database"
+    },
+    {
+      "itemId": 3,
+      "name": "table",
+      "type": "string",
+      "level": 3,
+      "parent": "database",
+      "mandatory": false,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "label": "Impala Table",
+      "description": "Impala Table"
+    },
+    {
+      "itemId": 4,
+      "name": "column",
+      "type": "string",
+      "level": 4,
+      "parent": "table",
+      "mandatory": false,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "label": "Impala Column",
+      "description": "Impala Column"
+    },
+    {
+      "itemId": 5,
+      "name": "function",
+      "type": "string",
+      "level": 5,
+      "parent": "database",
+      "mandatory": false,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": true
+      },
+      "label": "Impala Function",
+      "description": "Impala Function"
+    },
+    {
+      "itemId": 6,
+      "name": "uri",
+      "type": "string",
+      "level": 6,
+      "parent": "server",
+      "mandatory": false,
+      "lookupSupported": true,
+      "matcher": "org.apache.ranger.plugin.resourcematcher.RangerDefaultResourceMatcher",
+      "matcherOptions": {
+        "wildCard": true,
+        "ignoreCase": false
+      },
+      "label": "Impala URI",
+      "description": "Impala URI"
+    }
+  ],
+  "version": 1
+}

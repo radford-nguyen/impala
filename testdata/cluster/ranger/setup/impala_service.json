@@ -1,0 +1,7 @@
+{
+  "description": "Impala test service",
+  "isEnabled": true,
+  "name": "test_impala",
+  "type": "impala",
+  "version": 1
+}

@@ -1,0 +1,69 @@
+{
+  "description": "Impala admin policy for all - server, database, function",
+  "isAuditEnabled": true,
+  "isEnabled": true,
+  "name": "all - server, database, function",
+  "policyItems": [
+    {
+      "accesses": [
+        {
+          "type": "select",
+          "isAllowed": true
+        },
+        {
+          "type": "insert",
+          "isAllowed": true
+        },
+        {
+          "type": "alter",
+          "isAllowed": true
+        },
+        {
+          "type": "create",
+          "isAllowed": true
+        },
+        {
+          "type": "drop",
+          "isAllowed": true
+        },
+        {
+          "type": "refresh",
+          "isAllowed": true
+        },
+        {
+          "type": "all",
+          "isAllowed": true
+        }
+      ],
+      "delegateAdmin": true,
+      "users": [
+        "admin"
+      ]
+    }
+  ],
+  "resources": {
+    "server": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    },
+    "database": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    },
+    "function": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    }
+  },
+  "service": "test_impala",
+  "version": 1
+}

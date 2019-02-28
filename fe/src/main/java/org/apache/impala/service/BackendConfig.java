@@ -138,6 +138,14 @@ public class BackendConfig {
     return backendCfg_.getAuthorization_factory_class();
   }
 
+  public String getRangerServiceType() {
+    return backendCfg_.getRanger_service_type();
+  }
+
+  public String getRangerAppId() {
+    return backendCfg_.getRanger_app_id();
+  }
+
   // Inits the auth_to_local configuration in the static KerberosName class.
   private static void initAuthToLocal() {
     // If auth_to_local is enabled, we read the configuration hadoop.security.auth_to_local

@@ -1,0 +1,76 @@
+{
+  "description": "Impala admin policy for all - server, database, table, column",
+  "isAuditEnabled": true,
+  "isEnabled": true,
+  "name": "all - server, database, table, column",
+  "policyItems": [
+    {
+      "accesses": [
+        {
+          "type": "select",
+          "isAllowed": true
+        },
+        {
+          "type": "insert",
+          "isAllowed": true
+        },
+        {
+          "type": "alter",
+          "isAllowed": true
+        },
+        {
+          "type": "create",
+          "isAllowed": true
+        },
+        {
+          "type": "drop",
+          "isAllowed": true
+        },
+        {
+          "type": "refresh",
+          "isAllowed": true
+        },
+        {
+          "type": "all",
+          "isAllowed": true
+        }
+      ],
+      "delegateAdmin": true,
+      "users": [
+        "admin"
+      ]
+    }
+  ],
+  "resources": {
+    "server": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    },
+    "database": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    },
+    "table": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    },
+    "column": {
+      "isExcludes": false,
+      "isRecursive": false,
+      "values": [
+        "*"
+      ]
+    }
+  },
+  "service": "test_impala",
+  "version": 1
+}

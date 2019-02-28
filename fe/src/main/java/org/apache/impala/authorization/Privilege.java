@@ -69,7 +69,7 @@ public enum Privilege {
    * actions list or whether to check if the user has ALL of the privileges in the
    * actions list.
    */
-  public boolean getAnyOf() { return anyOf_; }
+  public boolean hasAnyOf() { return anyOf_; }
 
   /**
    * Gets list of implied privileges for this privilege.
