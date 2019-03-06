@@ -19,8 +19,20 @@ package org.apache.impala.authorization;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.hadoop.hive.metastore.api.PrincipalType;
+import org.apache.impala.catalog.CatalogServiceCatalog;
+import org.apache.impala.common.ImpalaException;
 import org.apache.impala.common.InternalException;
 import org.apache.impala.service.BackendConfig;
+import org.apache.impala.service.FeCatalogManager;
+import org.apache.impala.thrift.TCreateDropRoleParams;
+import org.apache.impala.thrift.TDdlExecResponse;
+import org.apache.impala.thrift.TGrantRevokePrivParams;
+import org.apache.impala.thrift.TGrantRevokeRoleParams;
+import org.apache.impala.thrift.TResultSet;
+import org.apache.impala.thrift.TShowGrantPrincipalParams;
+import org.apache.impala.thrift.TShowRolesParams;
+import org.apache.impala.thrift.TShowRolesResult;
 
 /**
  * An implementation of {@link AuthorizationFactory} that does not do any
@@ -53,6 +65,66 @@ public class NoneAuthorizationFactory implements AuthorizationFactory {
     };
   }
 
+  public static class NoneAuthorizationManager implements AuthorizationManager {
+    @Override
+    public boolean isAdmin(User user) throws ImpalaException {
+      return false;
+    }
+
+    @Override
+    public void createRole(User requestingUser, TCreateDropRoleParams params,
+        TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public void dropRole(User requestingUser, TCreateDropRoleParams params,
+        TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public TShowRolesResult getRoles(TShowRolesParams params) throws ImpalaException {
+      return new TShowRolesResult();
+    }
+
+    @Override
+    public void grantRoleToGroup(User requestingUser, TGrantRevokeRoleParams params,
+        TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public void revokeRoleFromGroup(User requestingUser, TGrantRevokeRoleParams params,
+        TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public void grantPrivilegeToRole(User requestingUser, TGrantRevokePrivParams params,
+        TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public void revokePrivilegeFromRole(User requestingUser,
+        TGrantRevokePrivParams params, TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public TResultSet getPrivileges(TShowGrantPrincipalParams params)
+        throws ImpalaException {
+      return new TResultSet();
+    }
+
+    @Override
+    public void updateDatabaseOwnerPrivilege(String serverName, String databaseName,
+        String oldOwner, PrincipalType oldOwnerType, String newOwner,
+        PrincipalType newOwnerType, TDdlExecResponse response) throws ImpalaException {
+    }
+
+    @Override
+    public void updateTableOwnerPrivilege(String serverName, String databaseName,
+        String tableName, String oldOwner, PrincipalType oldOwnerType, String newOwner,
+        PrincipalType newOwnerType, TDdlExecResponse response) throws ImpalaException {
+    }
+  }
+
   @Override
   public AuthorizationConfig newAuthorizationConfig(BackendConfig backendConfig) {
     return disabledAuthorizationConfig();
@@ -70,5 +142,16 @@ public class NoneAuthorizationFactory implements AuthorizationFactory {
         return true;
       }
     };
+  }
+
+  @Override
+  public AuthorizationManager newAuthorizationManager(FeCatalogManager catalog,
+      AuthorizationChecker authzChecker) {
+    return new NoneAuthorizationManager();
+  }
+
+  @Override
+  public AuthorizationManager newAuthorizationManager(CatalogServiceCatalog catalog) {
+    return new NoneAuthorizationManager();
   }
 }

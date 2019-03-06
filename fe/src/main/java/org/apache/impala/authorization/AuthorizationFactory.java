@@ -17,7 +17,9 @@
 
 package org.apache.impala.authorization;
 
+import org.apache.impala.catalog.CatalogServiceCatalog;
 import org.apache.impala.service.BackendConfig;
+import org.apache.impala.service.FeCatalogManager;
 
 /**
  * An interface for building an authorization provider. The implementation of
@@ -54,4 +56,15 @@ public interface AuthorizationFactory {
   default AuthorizableFactory getAuthorizableFactory() {
     return DEFAULT_AUTHORIZABLE_FACTORY;
   }
+
+  /**
+   * Creates a new instance of {@link AuthorizationManager}.
+   */
+  AuthorizationManager newAuthorizationManager(FeCatalogManager catalog,
+      AuthorizationChecker authzChecker);
+
+  /**
+   * Creates a new instance of {@link AuthorizationManager}.
+   */
+  AuthorizationManager newAuthorizationManager(CatalogServiceCatalog catalog);
 }

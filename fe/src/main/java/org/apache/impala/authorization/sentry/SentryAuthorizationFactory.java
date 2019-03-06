@@ -23,9 +23,12 @@ import com.google.common.base.Strings;
 import org.apache.impala.authorization.AuthorizableFactory;
 import org.apache.impala.authorization.AuthorizationChecker;
 import org.apache.impala.authorization.AuthorizationConfig;
+import org.apache.impala.authorization.AuthorizationManager;
 import org.apache.impala.authorization.AuthorizationPolicy;
 import org.apache.impala.authorization.AuthorizationFactory;
+import org.apache.impala.catalog.CatalogServiceCatalog;
 import org.apache.impala.service.BackendConfig;
+import org.apache.impala.service.FeCatalogManager;
 
 /**
  * An implementation of {@link AuthorizationFactory} that uses Sentry.
@@ -84,4 +87,15 @@ public class SentryAuthorizationFactory implements AuthorizationFactory {
 
   @Override
   public AuthorizableFactory getAuthorizableFactory() { return AUTHORIZABLE_FACTORY; }
+
+  @Override
+  public AuthorizationManager newAuthorizationManager(FeCatalogManager catalog,
+      AuthorizationChecker authzChecker) {
+    return new SentryImpaladAuthorizationManager(catalog, authzChecker);
+  }
+
+  @Override
+  public AuthorizationManager newAuthorizationManager(CatalogServiceCatalog catalog) {
+    return new SentryCatalogdAuthorizationManager(catalog);
+  }
 }
