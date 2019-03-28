@@ -27,9 +27,10 @@ public interface AuthorizationConfig {
   boolean isEnabled();
 
   /**
-   * Returns the authorization provider type.
+   * Returns the authorization provider name.  This is
+   * typically used only for logging.
    */
-  AuthorizationProvider getProvider();
+  String getProviderName();
 
   /**
    * The server name to secure.

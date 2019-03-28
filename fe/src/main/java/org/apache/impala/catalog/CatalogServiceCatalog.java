@@ -291,7 +291,7 @@ public class CatalogServiceCatalog extends Catalog {
       LOG.error("Couldn't identify the default FS. Cache Pool reader will be disabled.");
     }
     if (authConfig != null && authConfig.isEnabled() &&
-        authConfig.getProvider() == AuthorizationProvider.SENTRY) {
+        authConfig instanceof SentryAuthorizationConfig) {
       sentryProxy_ = new SentryProxy((SentryAuthorizationConfig) authConfig, this,
           kerberosPrincipal);
     } else {

@@ -45,6 +45,7 @@ import org.apache.impala.analysis.DescriptorTable;
 import org.apache.impala.analysis.ToSqlUtils;
 import org.apache.impala.authorization.AuthorizationConfig;
 import org.apache.impala.authorization.AuthorizationFactory;
+import org.apache.impala.authorization.AuthorizationProvider;
 import org.apache.impala.authorization.ImpalaInternalAdminUser;
 import org.apache.impala.authorization.NoneAuthorizationFactory;
 import org.apache.impala.authorization.User;
@@ -134,26 +135,7 @@ public class JniFrontend {
     GlogAppender.Install(TLogLevel.values()[cfg.impala_log_lvl],
         TLogLevel.values()[cfg.non_impala_java_vlog]);
 
-    AuthorizationFactory authzFactory;
-    try {
-      authzFactory = (AuthorizationFactory) Class.forName(
-          BackendConfig.INSTANCE.getAuthorizationFactoryClass())
-          .getConstructor(BackendConfig.class).newInstance(BackendConfig.INSTANCE);
-    } catch (Exception e) {
-      String msg = String.format("Unable to instantiate authorization provider: %s",
-          BackendConfig.INSTANCE.getAuthorizationFactoryClass());
-      throw new InternalException(msg,e);
-    }
-    AuthorizationConfig authzConfig = authzFactory.getAuthorizationConfig();
-    if (!authzConfig.isEnabled()) {
-      // For backward compatibility to keep the existing behavior, when authorization
-      // is not enabled, we need to use a dummy authorization config.
-      authzFactory = new NoneAuthorizationFactory(BackendConfig.INSTANCE);
-      LOG.info("Authorization is 'DISABLED'.");
-    } else {
-      LOG.info(String.format("Authorization is 'ENABLED' using %s.",
-          authzConfig.getProvider()));
-    }
+    final AuthorizationFactory authzFactory = authzFactoryFrom(BackendConfig.INSTANCE);
     LOG.info(JniUtil.getJavaVersion());
     frontend_ = new Frontend(authzFactory);
   }
@@ -782,5 +764,76 @@ public class JniFrontend {
           ". Error was: \n" + e.getMessage();
     }
     return "";
+  }
+
+  /**
+   * Returns the {@link AuthorizationFactory} class name specified by
+   * the given {@link BackendConfig}
+   *
+   * @param beCfg
+   * @return the AuthorizationFactory class name for the given BackendConfig
+   * @throws InternalException if the class name could not be determined from
+   *                           the given backend config values
+   */
+  public static String authzFactoryClassNameFrom(BackendConfig beCfg)
+      throws InternalException {
+    final String authzFactoryClassOption = beCfg.getAuthorizationFactoryClassOrNull();
+    final String authzFactoryClassName;
+    if (authzFactoryClassOption != null) {
+      // authorization_factory_class takes precedence
+      authzFactoryClassName = authzFactoryClassOption;
+    } else {
+      // use authorization_provider flag
+      final String authzProvider = beCfg.getAuthorizationProvider();
+      try {
+        final AuthorizationProvider provider = AuthorizationProvider.valueOf(
+            authzProvider.toUpperCase().trim()
+        );
+        authzFactoryClassName = provider.getAuthorizationFactoryClassName();
+      } catch (Exception e) {
+        throw new InternalException(
+            "Could not parse authorization_provider flag: " + authzProvider
+        );
+      }
+    }
+    return authzFactoryClassName;
+  }
+
+  /**
+   * Creates the appropriate {@link AuthorizationFactory} based on the
+   * given {@link BackendConfig}.
+   *
+   * @param beCfg the BackendConfig
+   * @return the correctly-chosen AuthorizationFactory
+   *
+   * @throws InternalException if the correct factory could not be determined
+   *                           e.g. if config flags are invalid
+   */
+  public static AuthorizationFactory authzFactoryFrom(BackendConfig beCfg)
+      throws InternalException {
+    final AuthorizationFactory authzFactory;
+    final String authzFactoryClassName = authzFactoryClassNameFrom(beCfg);
+    try {
+      authzFactory = (AuthorizationFactory)
+          Class.forName(authzFactoryClassName)
+              .getConstructor(BackendConfig.class)
+              .newInstance(beCfg);
+    } catch (Exception e) {
+      throw new InternalException(
+          "Unable to instantiate authorization provider: " + authzFactoryClassName, e
+      );
+    }
+    final AuthorizationConfig authzConfig = authzFactory.getAuthorizationConfig();
+
+    if (!authzConfig.isEnabled()) {
+      // For backward compatibility to keep the existing behavior, when authorization
+      // is not enabled, we need to use a dummy authorization config.
+      LOG.info("Authorization is 'DISABLED'.");
+      return new NoneAuthorizationFactory(beCfg);
+    }
+
+    LOG.info(String.format("Authorization is 'ENABLED' using %s.",
+        authzConfig.getProviderName()));
+    return authzFactory;
   }
 }

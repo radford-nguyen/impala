@@ -64,7 +64,7 @@ public class NoneAuthorizationFactory implements AuthorizationFactory {
       @Override
       public boolean isEnabled() { return false; }
       @Override
-      public AuthorizationProvider getProvider() { return AuthorizationProvider.NONE; }
+      public String getProviderName() { return "none"; }
       @Override
       public String getServerName() { return null; }
     };

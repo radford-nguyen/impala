@@ -312,8 +312,8 @@ public class FrontendTestBase extends AbstractFrontendTest {
           @Override
           public boolean isEnabled() { return true; }
           @Override
-          public AuthorizationProvider getProvider() {
-            return AuthorizationProvider.NONE;
+          public String getProviderName() {
+            return "none";
           }
           @Override
           public String getServerName() { return "server1"; }

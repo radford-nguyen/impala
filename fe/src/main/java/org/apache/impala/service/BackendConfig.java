@@ -28,6 +28,8 @@ import org.apache.impala.thrift.TBackendGflags;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 
+import javax.annotation.Nullable;
+
 /**
  * This class is meant to provide the FE with impalad backend configuration parameters,
  * including command line arguments.
@@ -130,8 +132,15 @@ public class BackendConfig {
     return backendCfg_.enable_orc_scanner;
   }
 
-  public String getAuthorizationFactoryClass() {
-    return backendCfg_.getAuthorization_factory_class();
+  /**
+   * Returns the value of the `authorization_factory_class` flag or `null` if
+   * the flag was not specified.
+   *
+   * @return value of the `authorization_factory_class` flag or `null` if not specified
+   */
+  public @Nullable String getAuthorizationFactoryClassOrNull() {
+    final String val =  backendCfg_.getAuthorization_factory_class();
+    return "".equals(val) ? null : val;
   }
 
   public boolean isMtDopUnlocked() {
@@ -144,6 +153,10 @@ public class BackendConfig {
 
   public String getRangerAppId() {
     return backendCfg_.getRanger_app_id();
+  }
+
+  public String getAuthorizationProvider() {
+    return backendCfg_.getAuthorization_provider();
   }
 
   // Inits the auth_to_local configuration in the static KerberosName class.
