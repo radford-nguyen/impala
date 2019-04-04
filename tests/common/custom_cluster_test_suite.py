@@ -147,7 +147,8 @@ class CustomClusterTestSuite(ImpalaTestSuite):
     if IMPALA_LOG_DIR in method.func_dict:
       self._start_impala_cluster(cluster_args,
           default_query_options=method.func_dict.get(DEFAULT_QUERY_OPTIONS),
-          impala_log_dir=method.func_dict[IMPALA_LOG_DIR], cluster_size=cluster_size)
+          impala_log_dir=method.func_dict[IMPALA_LOG_DIR], cluster_size=cluster_size,
+          num_coordinators=cluster_size, expected_num_executors=cluster_size)
     else:
       self._start_impala_cluster(cluster_args,
           default_query_options=method.func_dict.get(DEFAULT_QUERY_OPTIONS),
