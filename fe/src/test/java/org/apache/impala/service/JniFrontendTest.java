@@ -54,5 +54,6 @@ public class JniFrontendTest {
             "Consider using: %s instead.",
             ShellBasedUnixGroupsNetgroupMapping.class.getName(),
             JniBasedUnixGroupsNetgroupMappingWithFallback.class.getName()));
+
   }
 }
