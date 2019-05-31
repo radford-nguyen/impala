@@ -112,6 +112,7 @@ Frontend::Frontend() {
     {"callQueryCompleteHooks", "([B)V", &call_query_complete_hooks_id_},
     {"abortTransaction", "(J)V", &abort_txn_},
     {"unregisterTransaction", "(J)V", &unregister_txn_},
+    {"getQueryEventHookMetrics", "()[B", &get_query_event_hook_metrics_id_}
   };
 
   JNIEnv* jni_env = JniUtil::GetJNIEnv();
@@ -308,4 +309,8 @@ Status Frontend::BuildTestDescriptorTable(const TBuildTestDescriptorTableParams&
 // Call FE post-query execution hook
 Status Frontend::CallQueryCompleteHooks(const TQueryCompleteContext& context) {
   return JniUtil::CallJniMethod(fe_, call_query_complete_hooks_id_, context);
+}
+
+Status Frontend::GetQueryEventHookMetrics(TGetQueryEventHookMetricsResult* resp) {
+  return JniUtil::CallJniMethod(fe_, get_query_event_hook_metrics_id_, resp);
 }

@@ -2500,5 +2500,65 @@
     "units": "NONE",
     "kind": "COUNTER",
     "key": "cluster-membership.backends.total"
+  },
+  {
+    "description": "The number of times QueryEventHook $0 has been rejected for execution due to a full query_event_hook_queue",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Number of times QueryEventHook $0 has been rejected",
+    "units": "NONE",
+    "kind": "COUNTER",
+    "key": "query-event-hook.$0.execution-rejections"
+  },
+  {
+    "description": "The number of times QueryEventHook $0 has thrown an exception",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Number of times QueryEventHook $0 has exceptioned",
+    "units": "NONE",
+    "kind": "COUNTER",
+    "key": "query-event-hook.$0.execution-exceptions"
+  },
+  {
+    "description": "The number of times QueryEventHook $0 has been cancelled due to timeout",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Number of times QueryEventHook $0 has timed out",
+    "units": "NONE",
+    "kind": "COUNTER",
+    "key": "query-event-hook.$0.execution-timeouts"
+  },
+  {
+    "description": "The number of times QueryEventHook $0 has been submitted for execution",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Number of times QueryEventHook $0 has been submitted",
+    "units": "NONE",
+    "kind": "COUNTER",
+    "key": "query-event-hook.$0.execution-submissions"
+  },
+  {
+    "description": "The mean execution time (ns)for QueryEventHook $0",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Mean execution time (ns) of QueryEventHook $0",
+    "units": "TIME_NS",
+    "kind": "GAUGE",
+    "key": "query-event-hook.$0.mean-execution-time"
+  },
+  {
+    "description": "The mean time (ns) QueryEventHook $0 submissions have spent in queue waiting execution",
+    "contexts": [
+      "IMPALAD"
+    ],
+    "label": "Mean value of QueryEventHook $0 queue times (ns)",
+    "units": "TIME_NS",
+    "kind": "GAUGE",
+    "key": "query-event-hook.$0.mean-queued-time"
   }
 ]

@@ -953,3 +953,20 @@ struct TQueryCompleteContext {
   // in a future version
   1: required string lineage_string
 }
+
+// Performance metrics for a given QueryEventHook
+struct TQueryEventHookMetrics {
+  1: required i64 num_execution_rejections
+  2: required i64 num_execution_exceptions
+  3: required i64 num_execution_timeouts
+  4: required i64 num_execution_submissions
+  5: required double execution_mean_time
+  6: required double queued_mean_time
+}
+
+// Response from a call to getQueryEventHookMetrics.
+struct TGetQueryEventHookMetricsResult {
+  // map of hook name (generally $HOOK_CLASS.$HOOK_METHOD)
+  // to metrics for that hook
+  1: required map<string, TQueryEventHookMetrics> hook_metrics;
+}

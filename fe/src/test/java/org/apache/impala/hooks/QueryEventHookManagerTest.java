@@ -21,8 +21,11 @@ import org.apache.impala.common.InternalException;
 import org.apache.impala.service.BackendConfig;
 import org.apache.impala.testutil.AlwaysErrorQueryEventHook;
 import org.apache.impala.testutil.CountingQueryEventHook;
+import org.apache.impala.testutil.DummyQueryEventHook;
 import org.apache.impala.testutil.PostQueryErrorEventHook;
 import org.apache.impala.thrift.TBackendGflags;
+import org.apache.impala.thrift.TGetQueryEventHookMetricsResult;
+import org.apache.impala.thrift.TQueryEventHookMetrics;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -30,10 +33,14 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class QueryEventHookManagerTest {
   private TBackendGflags origFlags;
@@ -69,6 +76,8 @@ public class QueryEventHookManagerTest {
     }
 
     BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_nthreads(nThreads);
+    BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_use_daemon_threads(true);
+    BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_timeout_s(1);
 
     return QueryEventHookManager.createFromConfig(BackendConfig.INSTANCE);
   }
@@ -95,7 +104,7 @@ public class QueryEventHookManagerTest {
     assertEquals(mgr.getHooks().get(0).getClass(), PostQueryErrorEventHook.class);
 
     final List<Future<QueryEventHook>> futures =
-        mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
 
     // this should not exception
     final QueryEventHook hookImpl = futures.get(1).get(2, TimeUnit.SECONDS);
@@ -119,7 +128,7 @@ public class QueryEventHookManagerTest {
         CountingQueryEventHook.class.getCanonicalName());
 
     List<Future<QueryEventHook>> futures =
-        mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
 
     assertEquals(
         futures.size(),
@@ -130,7 +139,7 @@ public class QueryEventHookManagerTest {
       assertEquals(1, hook.getPostQueryExecuteInvocations());
     }
 
-    futures = mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+    futures = mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
 
     assertEquals(
         futures.size(),
@@ -142,5 +151,74 @@ public class QueryEventHookManagerTest {
     }
   }
 
+  @Test
+  public void testHookPostQueryMetricCollection() throws Exception {
+    final Class<? extends QueryEventHook> hookClass = DummyQueryEventHook.class;
+    final QueryEventHookManager mgr = createQueryEventHookManager(1,
+        hookClass.getCanonicalName());
+
+    final List<Future<QueryEventHook>> futures =
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
+
+    assertEquals(
+        futures.size(),
+        mgr.getHooks().size());
+
+    for (Future<QueryEventHook> f : futures) {
+      f.get(2, TimeUnit.SECONDS);
+    }
+
+    // hooks now guaranteed to have finished, so check metrics
+
+    final TGetQueryEventHookMetricsResult metricsResult = mgr.getMetrics();
+    final Map<String, TQueryEventHookMetrics> metricsMap =
+        metricsResult.getHook_metrics();
+
+    assertTrue(metricsMap.containsKey(hookClass.getName()));
+    final TQueryEventHookMetrics hookMetrics = metricsMap.get(hookClass.getName());
+
+    assertEquals(0, hookMetrics.getNum_execution_exceptions());
+    assertEquals(0, hookMetrics.getNum_execution_rejections());
+    assertEquals(0, hookMetrics.getNum_execution_timeouts());
+    assertEquals(1, hookMetrics.getNum_execution_submissions());
+
+    assertTrue(hookMetrics.getExecution_mean_time() > 0);
+    assertTrue(hookMetrics.getQueued_mean_time() > 0);
+  }
+
+  @Test
+  public void testHookPostQueryExceptionMetricCollection() throws Exception {
+    final Class<? extends QueryEventHook> hookClass = PostQueryErrorEventHook.class;
+    final QueryEventHookManager mgr = createQueryEventHookManager(1,
+        hookClass.getCanonicalName());
+
+    final List<Future<QueryEventHook>> futures =
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
+
+    assertEquals(
+        futures.size(),
+        mgr.getHooks().size());
+
+    for (Future<QueryEventHook> f : futures) {
+      try {
+        f.get(2, TimeUnit.SECONDS);
+        fail("ExecutionException expected but not thrown");
+      } catch (ExecutionException expected) {}
+    }
+
+    // hooks now guaranteed to have finished, so check metrics
+
+    final TGetQueryEventHookMetricsResult metricsResult = mgr.getMetrics();
+    final Map<String, TQueryEventHookMetrics> metricsMap =
+        metricsResult.getHook_metrics();
+
+    assertTrue(metricsMap.containsKey(hookClass.getName()));
+    final TQueryEventHookMetrics hookMetrics = metricsMap.get(hookClass.getName());
+
+    assertEquals(1, hookMetrics.getNum_execution_exceptions());
+    assertEquals(0, hookMetrics.getNum_execution_rejections());
+    assertEquals(0, hookMetrics.getNum_execution_timeouts());
+    assertEquals(1, hookMetrics.getNum_execution_submissions());
+  }
 }
 

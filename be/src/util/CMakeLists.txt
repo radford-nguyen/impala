@@ -56,6 +56,7 @@ add_library(Util
   hdfs-bulk-ops.cc
   hdr-histogram.cc
   histogram-metric.cc
+  hook-metrics.cc
   impalad-metrics.cc
   jni-util.cc
   logging-support.cc
@@ -113,6 +114,7 @@ add_library(UtilTests STATIC
   error-util-test.cc
   filesystem-util-test.cc
   fixed-size-hash-table-test.cc
+  hook-metrics-test.cc
   hdfs-util-test.cc
   logging-support-test.cc
   lru-cache-test.cc
@@ -177,7 +179,7 @@ ADD_UNIFIED_BE_LSAN_TEST(hdfs-util-test HdfsUtilTest.*)
 ADD_BE_LSAN_TEST(internal-queue-test)
 ADD_UNIFIED_BE_LSAN_TEST(logging-support-test "LoggingSupport.*")
 ADD_UNIFIED_BE_LSAN_TEST(lru-cache-test "FifoMultimap.*")
-ADD_UNIFIED_BE_LSAN_TEST(metrics-test "MetricsTest.*")
+ADD_UNIFIED_BE_LSAN_TEST(metrics-test "MetricsTest.*:QueryEventHookMetricContainerTest.*")
 ADD_UNIFIED_BE_LSAN_TEST(min-max-filter-test "MinMaxFilterTest.*")
 ADD_UNIFIED_BE_LSAN_TEST(openssl-util-test "OpenSSLUtilTest.*")
 ADD_UNIFIED_BE_LSAN_TEST(os-util-test "OsUtil.*")

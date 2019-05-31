@@ -16,19 +16,22 @@
 // under the License.
 package org.apache.impala.hooks;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang.StringUtils;
 import org.apache.impala.common.InternalException;
+import org.apache.impala.common.Metrics;
 import org.apache.impala.service.BackendConfig;
 import org.apache.impala.thrift.TBackendGflags;
+import org.apache.impala.thrift.TGetQueryEventHookMetricsResult;
+import org.apache.impala.thrift.TQueryEventHookMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -60,6 +63,11 @@ import java.util.stream.Collectors;
  * This execution is performed by a thread-pool executor, whose size is set at
  * compile-time.  This means that hooks may also execute concurrently.
  * </p>
+ * <p>
+ * For a more-detailed description of how
+ * {@link QueryEventHook#onQueryComplete(QueryCompleteContext)} is executed, please
+ * reference {@link FixedCapacityQueryHookExecutor}.
+ * </p>
  *
  */
 public class QueryEventHookManager {
@@ -68,11 +76,17 @@ public class QueryEventHookManager {
 
   // TODO: figure out a way to source these from the defn so
   //       we don't have to manually sync when they change
-  private static final String BE_HOOKS_FLAG = "query_event_hook_classes";
-  private static final String BE_HOOKS_THREADS_FLAG = "query_event_hook_nthreads";
+  static final String BE_HOOKS_FLAG = "query_event_hook_classes";
+  static final String BE_HOOKS_THREADS_FLAG = "query_event_hook_nthreads";
+  static final String BE_HOOKS_TIMEOUT_FLAG = "query_event_hook_timeout_s";
+  static final String BE_HOOKS_DAEMONTHREADS_FLAG = "query_event_hook_use_daemon_threads";
+  static final String BE_HOOKS_QUEUE_CAPACITY_FLAG = "query_event_hook_queue_capacity";
 
   private final List<QueryEventHook> hooks_;
-  private final ExecutorService hookExecutor_;
+  private final FixedCapacityQueryHookExecutor hookExecutor_;
+
+  // TODO: pass metrics to backend for publishing
+  private final Metrics hookMetrics_;
 
   /**
    * Static factory method to create a manager instance.  This will register
@@ -87,11 +101,17 @@ public class QueryEventHookManager {
   public static QueryEventHookManager createFromConfig(BackendConfig config)
       throws InternalException {
 
+    final int hookTimeout_s = config.getQueryExecHookTimeout_s();
     final int nHookThreads = config.getNumQueryExecHookThreads();
     final String queryExecHookClasses = config.getQueryExecHookClasses();
+    final boolean useDaemonThreads = config.getQueryEventHookDaemonThreads();
+    final int queueCapacity = config.getQueryExecHookQueueCapacity();
     LOG.info("QueryEventHook config:");
     LOG.info("- {}={}", BE_HOOKS_THREADS_FLAG, nHookThreads);
     LOG.info("- {}={}", BE_HOOKS_FLAG, queryExecHookClasses);
+    LOG.info("- {}={}", BE_HOOKS_TIMEOUT_FLAG, hookTimeout_s);
+    LOG.info("- {}={}", BE_HOOKS_DAEMONTHREADS_FLAG, useDaemonThreads);
+    LOG.info("- {}={}", BE_HOOKS_QUEUE_CAPACITY_FLAG, queueCapacity);
 
     final String[] hookClasses;
     if (StringUtils.isNotEmpty(queryExecHookClasses)) {
@@ -100,7 +120,8 @@ public class QueryEventHookManager {
       hookClasses = new String[0];
     }
 
-    return new QueryEventHookManager(nHookThreads, hookClasses);
+    return new QueryEventHookManager(
+        nHookThreads, hookClasses, hookTimeout_s, useDaemonThreads, queueCapacity);
   }
 
   /**
@@ -109,15 +130,46 @@ public class QueryEventHookManager {
    *
    * @param nHookExecutorThreads
    * @param hookClasses
+   * @param hookTimeout_s
+   * @param useDaemonThreads
    *
    * @throws IllegalArgumentException if {@code nHookExecutorThreads <= 0}
+   * @throws IllegalArgumentException if {@code hookTimeout_s <= 0}
+   * @throws IllegalArgumentException if {@code queueCapacity <= 0}
    * @throws InternalException if any hookClass cannot be instantiated
    * @throws InternalException if any hookClass.onImpalaStartup throws an exception
    */
-  private QueryEventHookManager(int nHookExecutorThreads, String[] hookClasses)
+  private QueryEventHookManager(int nHookExecutorThreads, String[] hookClasses,
+                                int hookTimeout_s, boolean useDaemonThreads,
+                                int queueCapacity)
       throws InternalException {
 
-    this.hookExecutor_ = Executors.newFixedThreadPool(nHookExecutorThreads);
+    if (nHookExecutorThreads <= 0) {
+      final String msg = String.format("# hook threads should be positive but was {}. " +
+          "Please check your %s flag", hookTimeout_s, BE_HOOKS_THREADS_FLAG);
+      LOG.error(msg);
+      throw new IllegalArgumentException(msg);
+    }
+
+    if (hookTimeout_s <= 0) {
+      final String msg = String.format("hook timeout should be positive but was {}. " +
+          "Please check your %s flag", hookTimeout_s, BE_HOOKS_TIMEOUT_FLAG);
+      LOG.error(msg);
+      throw new IllegalArgumentException(msg);
+    }
+
+    if (queueCapacity <= 0) {
+      final String msg = String.format("hook queue capacity should be >= 0 but was {}. " +
+          "Please check your %s flag", queueCapacity, BE_HOOKS_QUEUE_CAPACITY_FLAG);
+      LOG.error(msg);
+      throw new IllegalArgumentException(msg);
+    }
+
+    this.hookMetrics_ = new Metrics();
+    this.hookExecutor_ = new FixedCapacityQueryHookExecutor(
+        nHookExecutorThreads, hookTimeout_s, TimeUnit.SECONDS,
+        queueCapacity, useDaemonThreads, this.hookMetrics_);
+
     Runtime.getRuntime().addShutdownHook(new Thread(() -> this.cleanUp()));
 
     final List<QueryEventHook> hooks = new ArrayList<>(hookClasses.length);
@@ -146,8 +198,7 @@ public class QueryEventHookManager {
       try {
         LOG.debug("Initiating hook.onImpalaStartup for {}", hook.getClass().getName());
         hook.onImpalaStartup();
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         final String msg = String.format(
             "Exception during onImpalaStartup from QueryEventHook %s instance=%s",
             hook.getClass(), hook);
@@ -158,16 +209,7 @@ public class QueryEventHookManager {
   }
 
   private void cleanUp() {
-    if (!hookExecutor_.isShutdown()) {
-      hookExecutor_.shutdown();
-    }
-    // TODO (IMPALA-8571): we may want to await termination (up to a timeout)
-    // to ensure that hooks have a chance to complete execution.  Executor
-    // threads will typically run to completion after executor shutdown, but
-    // there are some instances where this doesnt hold. e.g.
-    //
-    // - executor thread is sleeping when shutdown is called
-    // - system.exit called
+    hookExecutor_.shutdown();
   }
 
   /**
@@ -183,46 +225,73 @@ public class QueryEventHookManager {
   /**
    * Hook method to be called after query execution.  This implementation
    * will execute all currently-registered {@link QueryEventHook}s
-   * asynchronously, returning immediately with a List of {@link Future}s
-   * representing each hook's {@link QueryEventHook#onQueryComplete(QueryCompleteContext)}
-   * invocation.
-   *
-   * <h3>Futures</h3>
-   *
-   * This method will return a list of {@link Future}s representing the future results
-   * of each hook's invocation.  The {@link Future#get()} method will return the
-   * hook instance whose invocation it represents.  The list of futures are in the
-   * same order as the order in which each hook's job was submitted.
-   *
-   * <h3>Error-Handling</h3>
-   *
-   * Exceptions thrown from {@link QueryEventHook#onQueryComplete(QueryCompleteContext)}
-   * will be logged and then rethrown on the executor thread(s), meaning that they
-   * will not halt execution.  Rather, they will be encapsulated in the returned
-   * {@link Future}s, meaning that the caller may choose to check or ignore them
-   * at some later time.
+   * asynchronously, returning immediately.  Actual execution is governed by
+   * {@link FixedCapacityQueryHookExecutor}, which you can reference for
+   * more details.
    *
    * @param context
    */
-  public List<Future<QueryEventHook>> executeQueryCompleteHooks(
+  public void executeQueryCompleteHooks(QueryCompleteContext context) {
+    _executeQueryCompleteHooks(context);
+  }
+
+  @VisibleForTesting
+  List<Future<QueryEventHook>> _executeQueryCompleteHooks(
       QueryCompleteContext context) {
     LOG.debug("Query complete hook invoked with: {}", context);
     return hooks_.stream().map(hook -> {
-      LOG.debug("Initiating onQueryComplete: {}", hook.getClass().getName());
-      return hookExecutor_.submit(() -> {
-        try {
-          hook.onQueryComplete(context);
-        } catch (Throwable t) {
-          final String msg = String.format("Exception thrown by QueryEventHook %s"+
-              ".onQueryComplete method.  Hook instance %s. This exception is "+
-              "currently being ignored by Impala, "+
-              "but may cause subsequent problems in that hook's execution",
-              hook.getClass().getName(), hook);
-          LOG.error(msg, t);
-          throw t;
-        }
-        return hook;
-      });
+      LOG.debug("Submitting onQueryComplete: {}", hook.getClass().getName());
+      return hookExecutor_.submitOnQueryComplete(hook, context);
     }).collect(Collectors.toList());
+  }
+
+  // constants to share with the executor so that no mismatches
+  // occur when looking up method names
+  static final String ON_QUERY_COMPLETE = "onQueryComplete";
+
+  /**
+   * Returns performance metrics for all registered {@link QueryEventHook}s.
+   * The implementation will lazily initialize metrics with the correct values
+   * if you invoke this method before any hooks have run.  For example,
+   * a hook "my_hook" will exist in the metrics and show 0 submissions if "my_hook"
+   * has never run.
+   *
+   * @return thrift struc containing metrics for all hooks.
+   */
+  public TGetQueryEventHookMetricsResult getMetrics() {
+    final TGetQueryEventHookMetricsResult result = new TGetQueryEventHookMetricsResult();
+    hooks_.forEach(h -> {
+      final TQueryEventHookMetrics metrics = getMetricsFor(h, ON_QUERY_COMPLETE);
+      result.putToHook_metrics(h.getClass().getName(), metrics);
+    });
+    return result;
+  }
+
+  /**
+   * Translates the metrics for the given hook class and name. WARNING: this
+   * will not fail if the given hook and method have not been previously-registered
+   * so test coverage should provide coverage for these cases.
+   */
+  @VisibleForTesting
+  TQueryEventHookMetrics getMetricsFor(QueryEventHook hook, String method) {
+    final TQueryEventHookMetrics metrics = new TQueryEventHookMetrics();
+    metrics.setNum_execution_rejections(
+        hookExecutor_.getRejectionCounter(hook, method).getCount());
+
+    metrics.setNum_execution_exceptions(
+        hookExecutor_.getExceptionCounter(hook, method).getCount());
+
+    metrics.setNum_execution_timeouts(
+        hookExecutor_.getTimeoutCounter(hook, method).getCount());
+
+    metrics.setNum_execution_submissions(
+        hookExecutor_.getSubmissionCounter(hook, method).getCount());
+
+    metrics.setExecution_mean_time(
+        hookExecutor_.getExecutionTimer(hook, method).getMeanRate());
+
+    metrics.setQueued_mean_time(
+        hookExecutor_.getQueuedTimer(hook, method).getMeanRate());
+    return metrics;
   }
 }

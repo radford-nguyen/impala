@@ -77,6 +77,7 @@ import org.apache.impala.thrift.TGetHadoopConfigRequest;
 import org.apache.impala.thrift.TGetHadoopConfigResponse;
 import org.apache.impala.thrift.TGetHadoopGroupsRequest;
 import org.apache.impala.thrift.TGetHadoopGroupsResponse;
+import org.apache.impala.thrift.TGetQueryEventHookMetricsResult;
 import org.apache.impala.thrift.TGetTablesParams;
 import org.apache.impala.thrift.TGetTablesResult;
 import org.apache.impala.thrift.TLoadDataReq;
@@ -652,6 +653,16 @@ public class JniFrontend {
    */
   public void unregisterTransaction(long transactionId) {
     this.frontend_.unregisterTransaction(transactionId);
+  }
+
+  /**
+   * JNI wrapper for {@link Frontend#getQueryEventHookMetrics()}.
+   *
+   */
+  public byte[] getQueryEventHookMetrics() throws ImpalaException {
+    final TGetQueryEventHookMetricsResult metrics =
+        this.frontend_.getQueryEventHookMetrics();
+    return JniUtil.serializeToThrift(metrics, protocolFactory_);
   }
 
   /**

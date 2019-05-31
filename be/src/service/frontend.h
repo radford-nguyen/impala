@@ -192,8 +192,11 @@ class Frontend {
   Status BuildTestDescriptorTable(const TBuildTestDescriptorTableParams& params,
       TDescriptorTable* result);
 
-  // Call FE post-query execution hook
+  // Call FE QueryEventHook.onQueryComplete hooks
   Status CallQueryCompleteHooks(const TQueryCompleteContext& context);
+
+  /// Get the metrics for all QueryEventHooks used by this frontend.
+  Status GetQueryEventHookMetrics(TGetQueryEventHookMetricsResult* resp);
 
  private:
   jobject fe_;  // instance of org.apache.impala.service.JniFrontend
@@ -226,6 +229,7 @@ class Frontend {
   jmethodID call_query_complete_hooks_id_; // JniFrontend.callQueryCompleteHooks
   jmethodID abort_txn_; // JniFrontend.abortTransaction()
   jmethodID unregister_txn_; // JniFrontend.abortTransaction()
+  jmethodID get_query_event_hook_metrics_id_; // JniFrontend.getQueryEventHookMetrics
 
   // Only used for testing.
   jmethodID build_test_descriptor_table_id_; // JniFrontend.buildTestDescriptorTable()
