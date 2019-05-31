@@ -191,7 +191,7 @@ class Frontend {
   Status BuildTestDescriptorTable(const TBuildTestDescriptorTableParams& params,
       TDescriptorTable* result);
 
-  // Call FE post-query execution hook
+  // Call FE QueryEventHook.onQueryComplete hooks
   Status CallQueryCompleteHooks(const TQueryCompleteContext& context);
 
  private:

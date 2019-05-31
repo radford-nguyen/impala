@@ -76,6 +76,9 @@ DECLARE_string(authorization_provider);
 DECLARE_bool(recursively_list_partitions);
 DECLARE_string(query_event_hook_classes);
 DECLARE_int32(query_event_hook_nthreads);
+DECLARE_int32(query_event_hook_timeout_s);
+DECLARE_bool(query_event_hook_use_daemon_threads);
+DECLARE_int32(query_event_hook_queue_capacity);
 DECLARE_bool(is_executor);
 DECLARE_bool(use_dedicated_coordinator_estimates);
 DECLARE_string(blacklisted_dbs);
@@ -160,6 +163,10 @@ Status GetThriftBackendGflags(JNIEnv* jni_env, jbyteArray* cfg_bytes) {
   cfg.__set_recursively_list_partitions(FLAGS_recursively_list_partitions);
   cfg.__set_query_event_hook_classes(FLAGS_query_event_hook_classes);
   cfg.__set_query_event_hook_nthreads(FLAGS_query_event_hook_nthreads);
+  cfg.__set_query_event_hook_timeout_s(FLAGS_query_event_hook_timeout_s);
+  cfg.__set_query_event_hook_use_daemon_threads(
+      FLAGS_query_event_hook_use_daemon_threads);
+  cfg.__set_query_event_hook_queue_capacity(FLAGS_query_event_hook_queue_capacity);
   cfg.__set_is_executor(FLAGS_is_executor);
   cfg.__set_use_dedicated_coordinator_estimates(
       FLAGS_use_dedicated_coordinator_estimates);

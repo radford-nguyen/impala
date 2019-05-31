@@ -282,6 +282,17 @@ DEFINE_int32(query_event_hook_nthreads, 1, "Number of threads to use for "
     "QueryEventHook execution. If this number is >1 then hooks will execute "
     "concurrently.");
 
+DEFINE_int32(query_event_hook_timeout_s, 3, "(Advanced) Maximum number of seconds to "
+    "wait for a QueryEventHook to execute before considering it unresponsive and killing "
+    "it. Must be positive.");
+
+DEFINE_bool(query_event_hook_use_daemon_threads, true, "Signals whether or not to use "
+    "daemon (Java) threads for QueryEventHook execution.");
+
+DEFINE_int32(query_event_hook_queue_capacity, 16, "Maximum number of QueryEventHook "
+    "tasks to queue before tasks begin to get rejected. Tasks are queued when there are "
+    "no free hook threads available for hook execution.");
+
 DECLARE_bool(compact_catalog_topic);
 
 namespace {

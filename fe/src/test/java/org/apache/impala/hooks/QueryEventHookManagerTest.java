@@ -30,9 +30,11 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 
 public class QueryEventHookManagerTest {
@@ -69,6 +71,8 @@ public class QueryEventHookManagerTest {
     }
 
     BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_nthreads(nThreads);
+    BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_use_daemon_threads(true);
+    BackendConfig.INSTANCE.getBackendCfg().setQuery_event_hook_timeout_s(1);
 
     return QueryEventHookManager.createFromConfig(BackendConfig.INSTANCE);
   }
@@ -95,12 +99,20 @@ public class QueryEventHookManagerTest {
     assertEquals(mgr.getHooks().get(0).getClass(), PostQueryErrorEventHook.class);
 
     final List<Future<QueryEventHook>> futures =
-        mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
+
+    try {
+      futures.get(0).get(2, TimeUnit.SECONDS);
+      fail("ExecutionException expected but not thrown");
+    }
+    catch (ExecutionException expected) {
+      assertEquals("intentional error", expected.getCause().getMessage());
+    }
 
     // this should not exception
-    final QueryEventHook hookImpl = futures.get(1).get(2, TimeUnit.SECONDS);
+    final QueryEventHook passHook = futures.get(1).get(2, TimeUnit.SECONDS);
 
-    assertEquals(hookImpl.getClass(), CountingQueryEventHook.class);
+    assertEquals(passHook.getClass(), CountingQueryEventHook.class);
   }
 
   @Test
@@ -119,7 +131,7 @@ public class QueryEventHookManagerTest {
         CountingQueryEventHook.class.getCanonicalName());
 
     List<Future<QueryEventHook>> futures =
-        mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+        mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
 
     assertEquals(
         futures.size(),
@@ -130,7 +142,7 @@ public class QueryEventHookManagerTest {
       assertEquals(1, hook.getPostQueryExecuteInvocations());
     }
 
-    futures = mgr.executeQueryCompleteHooks(mockQueryCompleteContext);
+    futures = mgr._executeQueryCompleteHooks(mockQueryCompleteContext);
 
     assertEquals(
         futures.size(),
@@ -141,6 +153,5 @@ public class QueryEventHookManagerTest {
       assertEquals(2, hook.getPostQueryExecuteInvocations());
     }
   }
-
 }
 

@@ -89,13 +89,17 @@ public interface QueryEventHook {
    * execution.
    * </p>
    *
-   * <h4>Hook Execution Blocks</h4>
+   * <h4>Hook Execution Blocks but is subject to Cancellation</h4>
    *
-   * A hook will block the thread it executes on until it completes.  If a hook hangs,
-   * then the thread also hangs.  Impala (currently) will not check for hanging hooks to
-   * take any action.  This means that if you have {@code query_event_hook_nthreads}
-   * less than the number of hooks, then 1 hook may effectively block others from
-   * executing.
+   * A hook will block the thread it executes on until it completes or the configured
+   * hook timeout has expired.  The timeout is measured from the time of hook task
+   * <i>submission</i>, so it is possible for a hook to be cancelled before it even
+   * starts executing, if for example all executor threads are busy.  If a hook is
+   * cancelled while running, this means that its thread will be interrupted, and this
+   * comes along with all the implications that interrupting a Java thread carries.
+   * <p>
+   * The timeout is configured by the {@code query_event_hook_timeout_s} flag.
+   * </p>
    *
    * <h4>Hook Exceptions are non-fatal</h4>
    *
@@ -111,6 +115,9 @@ public interface QueryEventHook {
    *
    * @param context object containing the post execution context
    *                of the query
+   *
+   * @throws InterruptedException if hook execution is cancelled by Impala's hook
+   *                              executor for exceeding the configured timeout
    */
   void onQueryComplete(QueryCompleteContext context);
 }

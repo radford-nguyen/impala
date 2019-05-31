@@ -145,4 +145,10 @@ struct TBackendGflags {
   60: required bool simplify_check_on_show_tables
 
   61: required bool mt_dop_auto_fallback
+
+  62: required i32 query_event_hook_timeout_s
+
+  63: required bool query_event_hook_use_daemon_threads
+
+  64: required i32 query_event_hook_queue_capacity
 }
