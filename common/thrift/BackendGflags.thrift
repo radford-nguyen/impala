@@ -143,4 +143,10 @@ struct TBackendGflags {
   59: required bool unlock_zorder_sort
 
   60: required bool simplify_check_on_show_tables
+
+  61: required i32 query_event_hook_timeout_s
+
+  62: required bool query_event_hook_use_daemon_threads
+
+  63: required i32 query_event_hook_queue_capacity
 }

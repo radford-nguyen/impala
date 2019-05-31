@@ -27,7 +27,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1621,47 +1620,8 @@ public class Frontend {
    *
    * <h3>Service Guarantees</h3>
    *
-   * Impala makes the following guarantees about how this method executes hooks:
-   *
-   * <h4>Hooks are executed asynchronously</h4>
-   *
-   * All hook execution happens asynchronously of the query that triggered
-   * them.  Hooks may still be executing after the query response has returned
-   * to the caller.  Additionally, hooks may execute concurrently if the
-   * hook executor thread size is configured appropriately.
-   *
-   * <h4>Hook Invocation is in Configuration Order</h4>
-   *
-   * The <i>submission</i> of the hook execution tasks occurs in the order
-   * that the hooks were defined in configuration.  This generally means that
-   * hooks will <i>start</i> executing in order, but there are no guarantees
-   * about finishing order.
-   * <p>
-   * For example, if configured with {@code query_event_hook_classes=hook1,hook2,hook3},
-   * then hook1 will start before hook2, and hook2 will start before hook3.
-   * If you need to guarantee that hook1 <i>completes</i> before hook2 starts, then
-   * you should specify {@code query_event_hook_nthreads=1} for serial hook
-   * execution.
-   * </p>
-   *
-   * <h4>Hook Execution Blocks</h4>
-   *
-   * A hook will block the thread it executes on until it completes.  If a hook hangs,
-   * then the thread also hangs.  Impala (currently) will not check for hanging hooks to
-   * take any action.  This means that if you have {@code query_event_hook_nthreads}
-   * less than the number of hooks, then 1 hook may effectively block others from
-   * executing.
-   *
-   * <h4>Hook Exceptions are non-fatal</h4>
-   *
-   * Any exception thrown from this hook method will be logged and ignored.  Therefore,
-   * an exception in 1 hook will not affect another hook (when no shared resources are
-   * involved).
-   *
-   * <h4>Hook Execution may end abruptly at Impala shutdown</h4>
-   *
-   * If a hook is still executing when Impala is shutdown, there are no guarantees
-   * that it will complete execution before being killed.
+   * The service guarantees for hook execution are described in the javadoc
+   * for {@link QueryEventHook}, which is part of the published api.
    *
    * @see QueryCompleteContext
    * @see QueryEventHookManager
@@ -1669,11 +1629,7 @@ public class Frontend {
    * @param context the execution context of the query
    */
   public void callQueryCompleteHooks(QueryCompleteContext context) {
-    // TODO (IMPALA-8571): can we make use of the futures to implement better
-    // error-handling?  Currently, the queryHookManager simply
-    // logs-then-rethrows any exception thrown from a hook.postQueryExecute
-    final List<Future<QueryEventHook>> futures
-        = this.queryHookManager_.executeQueryCompleteHooks(context);
+    this.queryHookManager_.executeQueryCompleteHooks(context);
   }
 
   /**
