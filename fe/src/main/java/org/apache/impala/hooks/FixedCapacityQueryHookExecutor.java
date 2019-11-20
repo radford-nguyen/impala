@@ -26,18 +26,9 @@ import org.apache.impala.common.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import static org.apache.impala.hooks.QueryEventHookManager.BE_HOOKS_TIMEOUT_FLAG;
@@ -74,19 +65,8 @@ import static org.apache.impala.hooks.QueryEventHookManager.ON_QUERY_COMPLETE;
  * to cancel tasks that do not complete execution within the timeout and thus
  * keep the queue from filling up.
  *
- * The timeout value is measured from the point of task _submission_, not
- * the start of task execution.  For this reason, it is possible for tasks to
- * be cancelled before they even start executing.
- *
- * For example, suppose there are 2 hook tasks that take roughly 3 seconds to
- * execute. An instance of this executor with a thread pool of size 1 and a hook
- * timeout of 4 seconds is used.  Then both hook tasks are submitted one after the other
- * (which is the typical use-case).  The first hook will begin executing
- * immediately, while the second goes into the queue.
- *
- * After 3 seconds, the first hook has completed and the second begins executing.
- * But since the timeout is measured from _submission_ time, the second hook
- * is cancelled after only ~1 second.
+ * The timeout value is measured from the start of task execution, so time spent
+ * queued waiting to be executed does not count against this.
  *
  *
  * ### Metrics
@@ -129,7 +109,7 @@ import static org.apache.impala.hooks.QueryEventHookManager.ON_QUERY_COMPLETE;
  *     execution, {@link Timer#getCount()} of this timer may be less than
  *     ${hookClass}.${method}.submissions
  */
-class FixedCapacityQueryHookExecutor {
+class FixedCapacityQueryHookExecutor extends ThreadPoolExecutor {
   private static final Logger LOG =
       LoggerFactory.getLogger(FixedCapacityQueryHookExecutor.class);
 
@@ -139,7 +119,7 @@ class FixedCapacityQueryHookExecutor {
   // use 2 executors, one for executing hook tasks and the other
   // for cancelling them if they have exceeded the configured timeout
   private final ScheduledThreadPoolExecutor timeoutMonitor_;
-  private final ThreadPoolExecutor hookExecutor_;
+  private final ConcurrentMap<Runnable, ScheduledFuture> runningHooks = new ConcurrentHashMap<>();
   private final int queueCapacity_;
   private final Metrics metrics_;
 
@@ -166,20 +146,27 @@ class FixedCapacityQueryHookExecutor {
       boolean useDaemonThreads,
       Metrics hookMetrics) {
 
+    // ArrayBlockingQueue constructor performs bounds-check on queueCapacity for us.
+    // super constructor performs bounds-check on nThreads for us.
+    super(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(queueCapacity),
+            new ThreadFactoryBuilder()
+                    .setNameFormat("QueryEventHookExecutor-%d")
+                    .setDaemon(useDaemonThreads)
+                    .build()
+    );
+
     this.metrics_ = Objects.requireNonNull(hookMetrics);
 
     Preconditions.checkArgument(hookTimeout >= 1,
         "hook timeout should be >= 1 but was " + hookTimeout);
+
     this.hookTimeout_ = hookTimeout;
 
     this.hookTimeoutUnit_ = Objects.requireNonNull(hookTimeoutUnit,
         "hookTimeoutUnit cannot be null");
 
-    // ArrayBlockingQueue constructor performs bounds-check on queueCapacity for us.
-    // ThreadPoolExecutor constructor performs bounds-check on nThreads for us.
     this.queueCapacity_ = queueCapacity;
-
-    final BlockingQueue<Runnable> boundedQueue = new ArrayBlockingQueue<>(queueCapacity);
 
     // This executor cancels any hook tasks that
     // have not completed within the configured timeout.
@@ -190,35 +177,54 @@ class FixedCapacityQueryHookExecutor {
                 .setDaemon(useDaemonThreads)
                 .build()
             );
-    this.timeoutMonitor_.setRemoveOnCancelPolicy(true);
 
-    // This executor executes the hook tasks.
-    this.hookExecutor_ =
-        new ThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS,
-            boundedQueue,
-            new ThreadFactoryBuilder()
-                .setNameFormat("QueryEventHookExecutor-%d")
-                .setDaemon(useDaemonThreads)
-                .build()
-            );
+    this.timeoutMonitor_.setRemoveOnCancelPolicy(true);
   }
 
   /**
-   * Initiates an orderly shutdown of the internal executors
-   * via {@link ExecutorService#shutdown()}
+   * {@inheritDoc}
    */
+  @Override
   public void shutdown() {
-    if (!timeoutMonitor_.isShutdown()) {
-      timeoutMonitor_.shutdown();
-    }
-    if (!hookExecutor_.isShutdown()) {
-      hookExecutor_.shutdown();
+    timeoutMonitor_.shutdown();
+    super.shutdown();
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public List<Runnable> shutdownNow() {
+    timeoutMonitor_.shutdownNow();
+    return super.shutdownNow();
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  protected void beforeExecute(Thread t, Runnable r) {
+    if (hookTimeout_ > 0) {
+      final Runnable cancelTask = r instanceof OnQueryCompleteHookTask ?
+              () -> ((OnQueryCompleteHookTask)r).cancel(t)
+              :
+              () -> t.interrupt();
+
+      final ScheduledFuture<?> scheduled = timeoutMonitor_.schedule(cancelTask, hookTimeout_, hookTimeoutUnit_);
+      runningHooks.put(r, scheduled);
     }
   }
 
-  @VisibleForTesting
-  int getHookQueueSize() {
-    return this.hookExecutor_.getQueue().size();
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  protected void afterExecute(Runnable r, Throwable t) {
+    ScheduledFuture timeoutTask = runningHooks.remove(r);
+    if (timeoutTask != null) {
+      // don't interrupt the task that is cancelling the hook!
+      timeoutTask.cancel(false);
+    }
   }
 
   /**
@@ -260,38 +266,13 @@ class FixedCapacityQueryHookExecutor {
 
     final String method = ON_QUERY_COMPLETE;
 
-    final Timer execTimer = getExecutionTimer(hook, method);
-    final Timer queuedTimer = getQueuedTimer(hook, method);
-
     getSubmissionCounter(hook, method).inc();
 
     final long submissionTime = System.nanoTime();
 
     final Future<QueryEventHook> f;
     try {
-      f = hookExecutor_.submit(() -> {
-        queuedTimer.update(System.nanoTime() - submissionTime, TimeUnit.NANOSECONDS);
-
-        return execTimer.time(() -> {
-          try {
-            hook.onQueryComplete(context);
-            return hook;
-          }
-          catch (Throwable t) {
-            getExceptionCounter(hook, method).inc();
-
-            LOG.error("Exception thrown by QueryEventHook {}.{} method.  " +
-                    "Hook instance {}. This exception is " +
-                    "currently being ignored by Impala, " +
-                    "but may cause subsequent problems in that hook's execution",
-                hook.getClass().getName(), method,
-                hook,
-                t);
-
-            throw t;
-          }
-        });
-      });
+      f = submit(new OnQueryCompleteHookTask(hook, submissionTime, context));
     } catch (RejectedExecutionException e) {
       // We catch the exception instead of using a custom RejectedExecutionHandler
       // in the executor because this way we have access to the QueryCompleteContext
@@ -302,51 +283,14 @@ class FixedCapacityQueryHookExecutor {
           hook.getClass().getName(), method,
           queueCapacity_,
           context,
-          hookExecutor_.getActiveCount());
+          getActiveCount());
 
       getRejectionCounter(hook, method).inc();
 
       return failedFuture(e);
     }
 
-    // TODO: IMPALA-XXX
-    //
-    // A timeout-check task is scheduled for every hook task that is
-    // scheduled, but a timeout-check task is not cancelled if the hook
-    // task completes.  This means that it is possible for the timeout-monitor's
-    // task queue to grow unbounded if hook tasks are scheduled at an interval
-    // smaller than the configured hook timeout.
-    timeoutMonitor_.schedule(
-        () -> checkHookTimeout(hook, context, f),
-        hookTimeout_, hookTimeoutUnit_);
-
     return f;
-  }
-
-  private void checkHookTimeout(
-      QueryEventHook hook,
-      QueryCompleteContext context,
-      Future<QueryEventHook> hookFuture) {
-
-    if (hookFuture.isDone()) return;
-
-    // cancel the hook task and log metrics/warning
-    hookFuture.cancel(true);
-
-    final String method = ON_QUERY_COMPLETE;
-
-    getTimeoutCounter(hook, method).inc();
-
-    LOG.warn("{}.{} task has not completed" +
-            "within {} {} of task submission and will be " +
-            "cancelled, whether or not it has begun execution.  You can check the " +
-            "configured timeout in your {} configuration property. " +
-            "The hook context being consumed was: {}",
-        hook.getClass().getName(), method,
-        hookTimeout_,
-        hookTimeoutUnit_,
-        BE_HOOKS_TIMEOUT_FLAG,
-        context);
   }
 
   // Returns a future that is already-completed (failed) with the
@@ -404,5 +348,71 @@ class FixedCapacityQueryHookExecutor {
         mName(hook.getClass().getName(), method, "queued-time"));
   }
 
-}
+  // Internal class that encapsulates a QueryEventHook.onQueryComplete task along
+  // with the means to cancel it.
+  //
+  // This class basically exists so that, at submission-time, we can bundle together
+  // information needed to collect/log metrics about hook execution and cancellation.
+  private class OnQueryCompleteHookTask implements Callable<QueryEventHook> {
+    private static final String HOOK_METHOD = ON_QUERY_COMPLETE;
+    private final QueryEventHook hook;
+    private final long submissionTime;
+    private final QueryCompleteContext context;
 
+    private OnQueryCompleteHookTask(QueryEventHook hook, long submissionTime, QueryCompleteContext context) {
+      this.hook = hook;
+      this.submissionTime = submissionTime;
+      this.context = context;
+    }
+
+    // Executes the submitted hook task that this
+    // object represents
+    @Override
+    public QueryEventHook call() throws Exception {
+      final Timer execTimer = getExecutionTimer(hook, HOOK_METHOD);
+      final Timer queuedTimer = getQueuedTimer(hook, HOOK_METHOD);
+      queuedTimer.update(System.nanoTime() - submissionTime, TimeUnit.NANOSECONDS);
+      return execTimer.time(() -> {
+        try {
+          hook.onQueryComplete(context);
+          return hook;
+        }
+        catch (Throwable t) {
+          getExceptionCounter(hook, HOOK_METHOD).inc();
+
+          LOG.error("Exception thrown by QueryEventHook {}.{} method.  " +
+                          "Hook instance {}. This exception is " +
+                          "currently being ignored by Impala, " +
+                          "but may cause subsequent problems in that hook's execution",
+                  hook.getClass().getName(), HOOK_METHOD,
+                  hook,
+                  t);
+
+          throw t;
+        }
+      });
+    }
+
+    // Cancels the running hook task that this
+    // object represents.  This should really only be called from
+    // the timeoutMonitor_ executor
+    private void cancel(Thread t) {
+      // cancel the hook task and log metrics/warning
+      t.interrupt();
+
+      getTimeoutCounter(hook, HOOK_METHOD).inc();
+
+      LOG.warn("{}.{} task has not completed" +
+                      "within {} {} of task submission and will be " +
+                      "cancelled, whether or not it has begun execution.  You can check the " +
+                      "configured timeout in your {} configuration property. " +
+                      "The hook context being consumed was: {}",
+              hook.getClass().getName(), HOOK_METHOD,
+              hookTimeout_,
+              hookTimeoutUnit_,
+              BE_HOOKS_TIMEOUT_FLAG,
+              context);
+    }
+  }
+
+}

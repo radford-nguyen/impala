@@ -107,7 +107,7 @@ public class FixedCapacityQueryHookExecutorTest {
                                   TimeUnit timeUnit) throws Exception {
     try {
       hookFuture.get(timeout, timeUnit);
-      fail("ExecutionException expected but not thrown");
+      fail("CancellationException expected but not thrown");
     }
     catch (CancellationException expected) {}
   }

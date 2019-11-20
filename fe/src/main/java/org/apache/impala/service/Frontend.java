@@ -1613,8 +1613,52 @@ public class Frontend {
    *
    * <h3>Service Guarantees</h3>
    *
-   * The service guarantees for hook execution are described in the javadoc
-   * for {@link QueryEventHook}, which is part of the published api.
+   * Impala makes the following guarantees about how this method is executed
+   * with respect to other implementations that may be registered:
+   *
+   * <h4>Hooks are executed asynchronously</h4>
+   *
+   * All hook execution happens asynchronously of the query that triggered
+   * them.  Hooks may still be executing after the query response has returned
+   * to the caller.  Additionally, hooks may execute concurrently if the
+   * hook executor thread size is configured appropriately.
+   *
+   * <h4>Hook Invocation is in Configuration Order</h4>
+   *
+   * The <i>submission</i> of the hook execution tasks occurs in the order
+   * that the hooks were defined in configuration.  This generally means that
+   * hooks will <i>start</i> executing in order, but there are no guarantees
+   * about finishing order.
+   * <p>
+   * For example, if configured with {@code query_event_hook_classes=hook1,hook2,hook3},
+   * then hook1 will start before hook2, and hook2 will start before hook3.
+   * If you need to guarantee that hook1 <i>completes</i> before hook2 starts, then
+   * you should specify {@code query_event_hook_nthreads=1} for serial hook
+   * execution.
+   * </p>
+   *
+   * <h4>Hook Execution Blocks but is subject to Cancellation</h4>
+   *
+   * A hook will block the thread it executes on until it completes or the configured
+   * hook timeout has expired.  The timeout is measured from the time of hook task
+   * <i>submission</i>, so it is possible for a hook to be cancelled before it even
+   * starts executing, if for example all executor threads are busy.  If a hook is
+   * cancelled while running, this means that its thread will be interrupted, and this
+   * comes along with all the implications that interrupting a Java thread carries.
+   * <p>
+   * The timeout is configured by the {@code query_event_hook_timeout_s} flag.
+   * </p>
+   *
+   * <h4>Hook Exceptions are non-fatal</h4>
+   *
+   * Any exception thrown from this hook method will be logged and ignored.  Therefore,
+   * an exception in 1 hook will not affect another hook (when no shared resources are
+   * involved).
+   *
+   * <h4>Hook Execution may end abruptly at Impala shutdown</h4>
+   *
+   * If a hook is still executing when Impala is shutdown, there are no guarantees
+   * that it will complete execution before being killed.
    *
    * @see QueryCompleteContext
    * @see QueryEventHookManager
